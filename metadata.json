@@ -1,0 +1,6 @@
+{
+  "name": "KasirKilat",
+  "description": "Aplikasi Kasir dan POS serbaguna dengan manajemen stok, struk digital, dan laporan penjualan offline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
