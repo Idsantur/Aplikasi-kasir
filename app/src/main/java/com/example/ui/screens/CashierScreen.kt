@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,12 +30,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Store
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +48,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -78,18 +84,21 @@ fun CashierScreen(
     onSearchChange: (String) -> Unit,
     onCategorySelect: (String) -> Unit,
     onAddToCart: (Product) -> Unit,
+    onDecreaseQuantity: (Long) -> Unit = {},
+    onClearCart: () -> Unit = {},
     onOpenCart: () -> Unit,
-    onOpenPayment: () -> Unit
+    onOpenPayment: () -> Unit,
+    onNavigateToProducts: () -> Unit = {}
 ) {
-    val allCategoriesList = listOf("Semua") + categories.filter { it != "Semua" }
+    val allCategoriesList = listOf("Semua") + categories.filter { it != "Semua" && it.isNotBlank() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = if (cartTotalItems > 0) 80.dp else 0.dp)
+                .padding(bottom = if (cartTotalItems > 0) 84.dp else 0.dp)
         ) {
-            // Header
+            // Header: Store identity & Transaction screen indicator
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface,
@@ -114,7 +123,7 @@ fun CashierScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.Store,
+                                        imageVector = Icons.Default.PointOfSale,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(20.dp)
@@ -130,7 +139,7 @@ fun CashierScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Mesin Kasir POS",
+                                    text = "Transaksi Kasir & Hitung Otomatis",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
@@ -199,7 +208,7 @@ fun CashierScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Category Chips
+                    // Category Chips Bar
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(vertical = 4.dp)
@@ -221,7 +230,7 @@ fun CashierScreen(
                 }
             }
 
-            // Products Grid
+            // Products Grid from Inventory
             if (products.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -231,17 +240,39 @@ fun CashierScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            imageVector = Icons.Default.Search,
+                            imageVector = Icons.Default.Inventory2,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(54.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Tidak ada produk yang cocok",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (searchQuery.isNotBlank() || selectedCategory != "Semua")
+                                "Tidak ada produk yang cocok dengan pencarian"
+                            else
+                                "Belum Ada Produk di Inventaris",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (searchQuery.isNotBlank() || selectedCategory != "Semua")
+                                "Coba ubah kata kunci atau pilih kategori 'Semua'"
+                            else
+                                "Tambahkan produk atau gunakan Menu Foto AI untuk mengisi katalog toko Anda.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = onNavigateToProducts,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Tambah Produk ke Inventaris")
+                        }
                     }
                 }
             } else {
@@ -263,14 +294,15 @@ fun CashierScreen(
                             inCartQty = inCartQty,
                             isLowStock = isLowStock,
                             isOutOfStock = isOutOfStock,
-                            onAddToCart = { onAddToCart(product) }
+                            onAddToCart = { onAddToCart(product) },
+                            onDecreaseQty = { onDecreaseQuantity(product.id) }
                         )
                     }
                 }
             }
         }
 
-        // Animated Bottom Cart Bar
+        // Animated Bottom Cart & Automatic Total Price Bar
         AnimatedVisibility(
             visible = cartTotalItems > 0,
             enter = slideInVertically(initialOffsetY = { it }),
@@ -280,13 +312,12 @@ fun CashierScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable { onOpenCart() }
                     .testTag("floating_cart_bar"),
                 color = MaterialTheme.colorScheme.primary,
                 tonalElevation = 8.dp,
-                shadowElevation = 6.dp
+                shadowElevation = 8.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -295,7 +326,13 @@ fun CashierScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Left: Total items & Automatic calculated price
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { onOpenCart() }
+                            .padding(vertical = 2.dp)
+                    ) {
                         BadgedBox(
                             badge = {
                                 Badge(
@@ -314,37 +351,52 @@ fun CashierScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
 
                         Column {
                             Text(
-                                text = "Total Pembelian",
+                                text = "Total Otomatis ($cartTotalItems item)",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                                fontWeight = FontWeight.Medium
                             )
                             Text(
                                 text = CurrencyFormatter.formatRupiah(cartSubtotal),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
 
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onOpenPayment() }
-                            .testTag("quick_pay_button"),
-                        color = MaterialTheme.colorScheme.onPrimary
+                    // Right: Actions (Rincian & Bayar Sekarang)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Bayar Sekarang",
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        OutlinedButton(
+                            onClick = onOpenCart,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.testTag("view_cart_items_button")
+                        ) {
+                            Text("Rincian", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = onOpenPayment,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            modifier = Modifier.testTag("quick_pay_button")
+                        ) {
+                            Text("Bayar", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -358,7 +410,8 @@ private fun ProductCard(
     inCartQty: Int,
     isLowStock: Boolean,
     isOutOfStock: Boolean,
-    onAddToCart: () -> Unit
+    onAddToCart: () -> Unit,
+    onDecreaseQty: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -375,7 +428,7 @@ private fun ProductCard(
             .testTag("product_card_${product.id}"),
         colors = CardDefaults.cardColors(
             containerColor = if (inCartQty > 0) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
@@ -437,7 +490,7 @@ private fun ProductCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Price & Add button
+            // Price & Interactive Stepper / Add button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -459,19 +512,56 @@ private fun ProductCard(
                     }
                 }
 
+                // Interactive stepper right on product card
                 if (inCartQty > 0) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = CircleShape,
-                        modifier = Modifier.size(28.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "$inCartQty",
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .clickable { onDecreaseQty() }
+                                .testTag("decrease_qty_${product.id}")
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Remove,
+                                    contentDescription = "Kurang",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "$inCartQty",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 2.dp)
+                        )
+
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .clickable { onAddToCart() }
+                                .testTag("increase_qty_${product.id}")
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Tambah",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
                     }
                 } else {
@@ -483,7 +573,7 @@ private fun ProductCard(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = "Tambah",
+                                contentDescription = "Pilih Produk",
                                 tint = if (isOutOfStock) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.size(16.dp)
                             )

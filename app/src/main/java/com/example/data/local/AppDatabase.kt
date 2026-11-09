@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.data.local.dao.CategoryDao
 import com.example.data.local.dao.ProductDao
 import com.example.data.local.dao.StoreProfileDao
 import com.example.data.local.dao.TransactionDao
+import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.Product
 import com.example.data.local.entity.StoreProfile
 import com.example.data.local.entity.TransactionEntity
@@ -17,15 +19,17 @@ import com.example.data.local.entity.TransactionItemEntity
         Product::class,
         TransactionEntity::class,
         TransactionItemEntity::class,
-        StoreProfile::class
+        StoreProfile::class,
+        CategoryEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
     abstract fun transactionDao(): TransactionDao
     abstract fun storeProfileDao(): StoreProfileDao
+    abstract fun categoryDao(): CategoryDao
 
     companion object {
         @Volatile

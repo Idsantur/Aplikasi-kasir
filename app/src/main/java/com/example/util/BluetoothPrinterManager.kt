@@ -105,14 +105,7 @@ object BluetoothPrinterManager {
         try {
             val device = adapter.getRemoteDevice(deviceAddress)
 
-            // Safely cancel discovery if active; silently ignore if permission is not granted
-            try {
-                if (adapter.isDiscovering) {
-                    adapter.cancelDiscovery()
-                }
-            } catch (e: Throwable) {
-                // Ignore SecurityException or any discovery cancellation error
-            }
+            // Direct connection to paired printer via RFCOMM socket (no discovery needed)
 
             // Attempt 1: Standard Serial Port Profile (SPP) UUID
             var connected = false

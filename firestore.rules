@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isValidTimestamp(val) {
+      return val is timestamp && val <= request.time;
+    }
+
+    function isValidStore(data) {
+      return data.keys().hasAll(['phoneNumber', 'pinHash', 'storeName', 'ownerUid', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['phoneNumber', 'pinHash', 'storeName', 'ownerUid', 'createdAt', 'updatedAt', 'address', 'phone']) &&
+             data.phoneNumber is string && data.phoneNumber.size() >= 8 && data.phoneNumber.size() <= 20 &&
+             data.pinHash is string && data.pinHash.size() == 64 &&
+             data.storeName is string && data.storeName.size() > 0 && data.storeName.size() <= 100 &&
+             data.ownerUid is string && data.ownerUid.size() > 0 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['phoneNumber', 'name', 'category', 'sellingPrice', 'costPrice', 'stock', 'unit', 'isActive', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['phoneNumber', 'name', 'barcode', 'category', 'sellingPrice', 'costPrice', 'stock', 'unit', 'isActive', 'createdAt', 'updatedAt', 'id']) &&
+             data.phoneNumber is string && data.phoneNumber.size() >= 8 && data.phoneNumber.size() <= 20 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+             data.sellingPrice is int && data.sellingPrice >= 0 &&
+             data.costPrice is int && data.costPrice >= 0 &&
+             data.stock is int &&
+             data.unit is string && data.unit.size() > 0 && data.unit.size() <= 20 &&
+             data.isActive is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['phoneNumber', 'name', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['phoneNumber', 'name', 'createdAt', 'updatedAt', 'id']) &&
+             data.phoneNumber is string && data.phoneNumber.size() >= 8 && data.phoneNumber.size() <= 20 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 50 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    match /stores/{phoneNumber} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidStore(request.resource.data) && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuthenticated() && isValidStore(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+
+      match /products/{productId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && isValidProduct(request.resource.data);
+        allow update: if isAuthenticated() && isValidProduct(request.resource.data);
+        allow delete: if isAuthenticated();
+      }
+
+      match /categories/{categoryId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && isValidCategory(request.resource.data);
+        allow update: if isAuthenticated() && isValidCategory(request.resource.data);
+        allow delete: if isAuthenticated();
+      }
+    }
+  }
+}

@@ -15,15 +15,21 @@ class PosRepository(private val database: AppDatabase) {
     private val productDao = database.productDao()
     private val transactionDao = database.transactionDao()
     private val storeProfileDao = database.storeProfileDao()
+    private val categoryDao = database.categoryDao()
 
     val allProducts: Flow<List<Product>> = productDao.getAllActiveProducts()
     val allCategories: Flow<List<String>> = productDao.getAllCategories()
+    val allManagedCategories: Flow<List<com.example.data.local.entity.CategoryEntity>> = categoryDao.getAllCategories()
     val allTransactions: Flow<List<TransactionWithItems>> = transactionDao.getAllTransactionsWithItems()
     val storeProfile: Flow<StoreProfile?> = storeProfileDao.getStoreProfile()
     val totalRevenue: Flow<Long?> = transactionDao.getTotalRevenue()
     val totalProfit: Flow<Long?> = transactionDao.getTotalProfit()
     val totalTransactionCount: Flow<Int> = transactionDao.getTransactionCount()
     val topSellingProducts: Flow<List<TopProductRaw>> = transactionDao.getTopSellingProducts(5)
+
+    val totalInventoryCost: Flow<Long?> = productDao.getTotalInventoryCost()
+    val totalInventoryValue: Flow<Long?> = productDao.getTotalInventoryValue()
+    val totalStockUnits: Flow<Int?> = productDao.getTotalStockUnits()
 
     fun searchProducts(query: String): Flow<List<Product>> {
         return productDao.searchProducts(query)
@@ -41,8 +47,47 @@ class PosRepository(private val database: AppDatabase) {
         productDao.deleteProduct(product)
     }
 
+    suspend fun adjustStock(productId: Long, delta: Int) {
+        productDao.adjustStock(productId, delta)
+    }
+
+    suspend fun updateStock(productId: Long, newStock: Int) {
+        productDao.updateStock(productId, newStock)
+    }
+
     suspend fun updateStoreProfile(profile: StoreProfile) {
         storeProfileDao.insertOrUpdate(profile)
+    }
+
+    suspend fun addCategory(name: String): Long {
+        return categoryDao.insertCategory(com.example.data.local.entity.CategoryEntity(name = name.trim()))
+    }
+
+    suspend fun updateCategory(id: Long, oldName: String, newName: String) {
+        database.withTransaction {
+            categoryDao.updateCategory(com.example.data.local.entity.CategoryEntity(id = id, name = newName.trim()))
+            categoryDao.renameProductCategories(oldName.trim(), newName.trim())
+        }
+    }
+
+    suspend fun deleteCategory(category: com.example.data.local.entity.CategoryEntity, deleteProductsAlso: Boolean = false) {
+        database.withTransaction {
+            categoryDao.deleteCategory(category)
+            if (deleteProductsAlso) {
+                categoryDao.deleteProductsInCategory(category.name)
+            } else {
+                categoryDao.reassignProductsToDefault(category.name)
+            }
+        }
+    }
+
+    suspend fun cleanDefaultUnwantedCategoriesAndProducts() {
+        database.withTransaction {
+            categoryDao.deleteDefaultSampleCategories()
+            categoryDao.deleteDefaultSampleProducts()
+            categoryDao.deleteDefaultUnwantedCategories()
+            categoryDao.deleteDefaultUnwantedProducts()
+        }
     }
 
     suspend fun checkout(
@@ -64,142 +109,67 @@ class PosRepository(private val database: AppDatabase) {
         }
     }
 
-    suspend fun seedInitialDataIfNeeded() {
-        if (productDao.countProducts() == 0) {
-            val sampleProducts = listOf(
+    suspend fun getActiveProductsList(): List<Product> {
+        return productDao.getAllActiveProductsList()
+    }
+
+    suspend fun restoreCatalogFromCloud(catalog: com.example.data.cloud.RestoredStoreCatalog) {
+        database.withTransaction {
+            // Remove previous local products to prevent duplicates or obsolete items from old phone
+            productDao.deleteAllProducts()
+
+            // Insert restored products from Cloud
+            val newProducts = catalog.products.map { cp ->
                 Product(
-                    name = "Kopi Susu Gula Aren",
-                    barcode = "8991001",
-                    category = "Minuman",
-                    costPrice = 8000,
-                    sellingPrice = 15000,
-                    stock = 35,
-                    minStockAlert = 10,
-                    unit = "cup"
-                ),
-                Product(
-                    name = "Es Teh Manis Jumbo",
-                    barcode = "8991002",
-                    category = "Minuman",
-                    costPrice = 2000,
-                    sellingPrice = 5000,
-                    stock = 50,
-                    minStockAlert = 10,
-                    unit = "cup"
-                ),
-                Product(
-                    name = "Matcha Latte Ice",
-                    barcode = "8991003",
-                    category = "Minuman",
-                    costPrice = 10000,
-                    sellingPrice = 18000,
-                    stock = 25,
-                    minStockAlert = 5,
-                    unit = "cup"
-                ),
-                Product(
-                    name = "Roti Bakar Cokelat Keju",
-                    barcode = "8992001",
-                    category = "Makanan",
-                    costPrice = 9000,
-                    sellingPrice = 16000,
-                    stock = 20,
-                    minStockAlert = 5,
-                    unit = "porsi"
-                ),
-                Product(
-                    name = "Nasi Goreng Spesial",
-                    barcode = "8992002",
-                    category = "Makanan",
-                    costPrice = 12000,
-                    sellingPrice = 22000,
-                    stock = 30,
-                    minStockAlert = 5,
-                    unit = "porsi"
-                ),
-                Product(
-                    name = "Mie Instan Telur Kornet",
-                    barcode = "8992003",
-                    category = "Makanan",
-                    costPrice = 7000,
-                    sellingPrice = 13000,
-                    stock = 4, // Menipis
-                    minStockAlert = 5,
-                    unit = "porsi"
-                ),
-                Product(
-                    name = "Keripik Singkong Balado",
-                    barcode = "8993001",
-                    category = "Snack",
-                    costPrice = 6000,
-                    sellingPrice = 10000,
-                    stock = 24,
-                    minStockAlert = 6,
-                    unit = "bungkus"
-                ),
-                Product(
-                    name = "Biskuit Cokelat Sandwich",
-                    barcode = "8993002",
-                    category = "Snack",
-                    costPrice = 5500,
-                    sellingPrice = 8500,
-                    stock = 3, // Menipis
-                    minStockAlert = 5,
-                    unit = "bungkus"
-                ),
-                Product(
-                    name = "Beras Pandan Wangi 5kg",
-                    barcode = "8994001",
-                    category = "Sembako",
-                    costPrice = 64000,
-                    sellingPrice = 75000,
-                    stock = 12,
-                    minStockAlert = 3,
-                    unit = "karung"
-                ),
-                Product(
-                    name = "Minyak Goreng Refill 1L",
-                    barcode = "8994002",
-                    category = "Sembako",
-                    costPrice = 14500,
-                    sellingPrice = 17500,
-                    stock = 18,
-                    minStockAlert = 5,
-                    unit = "pouch"
-                ),
-                Product(
-                    name = "Gula Pasir Kristal 1kg",
-                    barcode = "8994003",
-                    category = "Sembako",
-                    costPrice = 13500,
-                    sellingPrice = 16500,
-                    stock = 20,
-                    minStockAlert = 5,
-                    unit = "bungkus"
-                ),
-                Product(
-                    name = "Jasa Desain & Cetak Nota A4",
-                    barcode = "8995001",
-                    category = "Jasa",
-                    costPrice = 500,
-                    sellingPrice = 2500,
-                    stock = 999,
-                    minStockAlert = 0,
-                    unit = "lembar"
+                    name = cp.name,
+                    barcode = cp.barcode,
+                    category = cp.category,
+                    sellingPrice = cp.sellingPrice,
+                    costPrice = cp.costPrice,
+                    stock = cp.stock,
+                    unit = cp.unit,
+                    isActive = cp.isActive
                 )
-            )
-            productDao.insertProducts(sampleProducts)
+            }
+            if (newProducts.isNotEmpty()) {
+                productDao.insertProducts(newProducts)
+            }
+
+            // Insert restored categories
+            for (cat in catalog.categories) {
+                val catClean = cat.trim()
+                if (catClean.isNotBlank() && catClean != "Semua") {
+                    categoryDao.insertCategory(com.example.data.local.entity.CategoryEntity(name = catClean))
+                }
+            }
+
+            // Update store profile info
+            if (catalog.storeName.isNotBlank()) {
+                val current = storeProfileDao.getStoreProfileSync() ?: StoreProfile()
+                storeProfileDao.insertOrUpdate(
+                    current.copy(
+                        storeName = catalog.storeName,
+                        address = if (catalog.address.isNotBlank()) catalog.address else current.address,
+                        phone = if (catalog.phone.isNotBlank()) catalog.phone else current.phone
+                    )
+                )
+            }
         }
+    }
+
+    suspend fun seedInitialDataIfNeeded() {
+        // Automatically purge any dummy/sample grocery categories and products
+        cleanDefaultUnwantedCategoriesAndProducts()
 
         if (storeProfileDao.getStoreProfileSync() == null) {
             storeProfileDao.insertOrUpdate(
                 StoreProfile(
                     id = 1,
-                    storeName = "KasirKilat Mart & Cafe",
+                    storeName = "KasirKilat POS & Toko",
                     phone = "0812-3456-7890",
-                    address = "Jl. Merdeka No. 88, Pusat Niaga",
+                    address = "Pusat Niaga",
                     receiptHeaderNote = "Selamat Berbelanja!",
-                    receiptFooterNote = "Terima kasih telah berbelanja di KasirKilat!\nBarang yang sudah dibeli tidak dapat ditukar.",
+                    receiptFooterNote = "Terima kasih telah berbelanja di toko kami!\nBarang yang sudah dibeli tidak dapat ditukar.",
                     taxPercent = 0.0,
                     isTaxEnabled = false
                 )

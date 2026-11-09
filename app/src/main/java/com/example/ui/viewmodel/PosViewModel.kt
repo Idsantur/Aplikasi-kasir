@@ -24,20 +24,49 @@ import kotlinx.coroutines.launch
 class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: PosRepository
+    private val cloudSyncRepository: com.example.data.cloud.CloudSyncRepository
+    private val sessionManager: com.example.data.local.StoreSessionManager
+
+    // Cloud Store Account & Sync States
+    private val _activeStoreSession = MutableStateFlow<com.example.data.local.ActiveStoreSession?>(null)
+    val activeStoreSession: StateFlow<com.example.data.local.ActiveStoreSession?> = _activeStoreSession.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    private val _syncStatusMessage = MutableStateFlow<String?>(null)
+    val syncStatusMessage: StateFlow<String?> = _syncStatusMessage.asStateFlow()
 
     init {
         val db = AppDatabase.getDatabase(application)
         repository = PosRepository(db)
+        cloudSyncRepository = com.example.data.cloud.CloudSyncRepository(application)
+        sessionManager = com.example.data.local.StoreSessionManager(application)
+        _activeStoreSession.value = sessionManager.getActiveSession()
         viewModelScope.launch {
             repository.seedInitialDataIfNeeded()
         }
     }
 
-    // Products & Categories
+    // Products & Categories - purely user-managed, purging old sample grocery categories
+    private val defaultUnwantedCategories = setOf("makanan", "minuman", "cemilan", "snak", "snack", "sembako", "jasa")
+
     val allProducts: StateFlow<List<Product>> = repository.allProducts
+        .combine(MutableStateFlow(Unit)) { prods, _ ->
+            prods.filter { !defaultUnwantedCategories.contains(it.category.lowercase().trim()) }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val allCategories: StateFlow<List<String>> = repository.allCategories
+        .combine(MutableStateFlow(Unit)) { cats, _ ->
+            cats.filter { !defaultUnwantedCategories.contains(it.lowercase().trim()) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allManagedCategories: StateFlow<List<com.example.data.local.entity.CategoryEntity>> = repository.allManagedCategories
+        .combine(MutableStateFlow(Unit)) { cats, _ ->
+            cats.filter { !defaultUnwantedCategories.contains(it.name.lowercase().trim()) }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Search & Filter
@@ -101,6 +130,25 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
 
     val topSellingProducts: StateFlow<List<TopProductRaw>> = repository.topSellingProducts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Inventory & Stock Valuation - derived directly from active clean products
+    val totalInventoryCost: StateFlow<Long> = allProducts
+        .combine(MutableStateFlow(Unit)) { prods, _ ->
+            prods.sumOf { it.costPrice * it.stock }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    val totalInventorySellingValue: StateFlow<Long> = allProducts
+        .combine(MutableStateFlow(Unit)) { prods, _ ->
+            prods.sumOf { it.sellingPrice * it.stock }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    val totalStockUnits: StateFlow<Int> = allProducts
+        .combine(MutableStateFlow(Unit)) { prods, _ ->
+            prods.sumOf { it.stock }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // Receipt Dialog State
     private val _latestCompletedReceipt = MutableStateFlow<TransactionWithItems?>(null)
@@ -230,6 +278,46 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 repository.updateProduct(product)
             }
+            if (product.category.isNotBlank() && product.category != "Umum") {
+                repository.addCategory(product.category)
+            }
+        }
+    }
+
+    fun addCategory(name: String) {
+        viewModelScope.launch {
+            if (name.isNotBlank()) {
+                repository.addCategory(name.trim())
+            }
+        }
+    }
+
+    fun updateCategory(id: Long, oldName: String, newName: String) {
+        viewModelScope.launch {
+            if (newName.isNotBlank()) {
+                repository.updateCategory(id, oldName.trim(), newName.trim())
+            }
+        }
+    }
+
+    fun deleteCategory(category: com.example.data.local.entity.CategoryEntity, deleteProductsAlso: Boolean = false) {
+        viewModelScope.launch {
+            repository.deleteCategory(category, deleteProductsAlso)
+        }
+    }
+
+    fun cleanDefaultUnwantedCategories() {
+        viewModelScope.launch {
+            repository.cleanDefaultUnwantedCategoriesAndProducts()
+        }
+    }
+
+    fun updateProductCategory(product: Product, newCategory: String) {
+        viewModelScope.launch {
+            if (newCategory.isNotBlank()) {
+                repository.updateProduct(product.copy(category = newCategory.trim()))
+                repository.addCategory(newCategory.trim())
+            }
         }
     }
 
@@ -241,9 +329,156 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun adjustStock(productId: Long, delta: Int) {
+        viewModelScope.launch {
+            repository.adjustStock(productId, delta)
+        }
+    }
+
+    fun updateStock(productId: Long, newStock: Int) {
+        viewModelScope.launch {
+            repository.updateStock(productId, newStock)
+        }
+    }
+
     fun saveStoreProfile(profile: StoreProfile) {
         viewModelScope.launch {
             repository.updateStoreProfile(profile)
         }
+    }
+
+    // Cloud Store Account & Sync Functions
+    fun registerStoreAccount(
+        phoneNumber: String,
+        pin: String,
+        storeName: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncStatusMessage.value = "Mendaftarkan akun toko..."
+            val result = cloudSyncRepository.registerStore(
+                phoneNumber = phoneNumber,
+                pin = pin,
+                storeName = storeName
+            )
+            _isSyncing.value = false
+            if (result.isSuccess) {
+                sessionManager.saveActiveSession(phoneNumber, storeName)
+                _activeStoreSession.value = sessionManager.getActiveSession()
+                _syncStatusMessage.value = "Akun berhasil terdaftar di Cloud!"
+                // Automatically upload current catalog if there are local products
+                syncCatalogToCloud(pin, onSuccess = {}, onError = {})
+                onSuccess()
+            } else {
+                val err = result.exceptionOrNull()?.localizedMessage ?: "Gagal mendaftarkan akun"
+                _syncStatusMessage.value = err
+                onError(err)
+            }
+        }
+    }
+
+    fun loginStoreAccount(
+        phoneNumber: String,
+        pin: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncStatusMessage.value = "Memverifikasi akun..."
+            val result = cloudSyncRepository.loginStore(phoneNumber, pin)
+            if (result.isSuccess) {
+                val store = result.getOrThrow()
+                sessionManager.saveActiveSession(store.phoneNumber, store.storeName)
+                _activeStoreSession.value = sessionManager.getActiveSession()
+                _syncStatusMessage.value = "Berhasil masuk akun!"
+                _isSyncing.value = false
+                onSuccess()
+            } else {
+                _isSyncing.value = false
+                val err = result.exceptionOrNull()?.localizedMessage ?: "Gagal masuk akun"
+                _syncStatusMessage.value = err
+                onError(err)
+            }
+        }
+    }
+
+    fun syncCatalogToCloud(
+        pin: String,
+        onSuccess: (Int) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val session = _activeStoreSession.value
+        if (session == null) {
+            onError("Belum masuk ke akun toko. Silakan masuk terlebih dahulu.")
+            return
+        }
+
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncStatusMessage.value = "Mengunggah menu & katalog ke Cloud..."
+            val currentProducts = allProducts.value
+            val currentCategories = allCategories.value
+            val currentProfile = storeProfile.value
+
+            val result = cloudSyncRepository.uploadStoreCatalog(
+                phoneNumber = session.phoneNumber,
+                pin = pin,
+                products = currentProducts,
+                categories = currentCategories,
+                storeProfile = currentProfile
+            )
+            _isSyncing.value = false
+            if (result.isSuccess) {
+                val count = result.getOrNull() ?: currentProducts.size
+                sessionManager.updateLastSyncTime()
+                _activeStoreSession.value = sessionManager.getActiveSession()
+                _syncStatusMessage.value = "$count item menu berhasil dicadangkan ke Cloud."
+                onSuccess(count)
+            } else {
+                val err = result.exceptionOrNull()?.localizedMessage ?: "Gagal sinkronisasi"
+                _syncStatusMessage.value = err
+                onError(err)
+            }
+        }
+    }
+
+    fun restoreCatalogFromCloud(
+        phoneNumber: String,
+        pin: String,
+        onSuccess: (Int) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncStatusMessage.value = "Mengunduh menu dari Cloud..."
+            val result = cloudSyncRepository.downloadStoreCatalog(phoneNumber, pin)
+            if (result.isSuccess) {
+                val catalog = result.getOrThrow()
+                repository.restoreCatalogFromCloud(catalog)
+                sessionManager.saveActiveSession(phoneNumber, catalog.storeName)
+                _activeStoreSession.value = sessionManager.getActiveSession()
+                _isSyncing.value = false
+                _syncStatusMessage.value = "${catalog.products.size} menu berhasil dipulihkan dari Cloud!"
+                onSuccess(catalog.products.size)
+            } else {
+                _isSyncing.value = false
+                val err = result.exceptionOrNull()?.localizedMessage ?: "Gagal memulihkan katalog"
+                _syncStatusMessage.value = err
+                onError(err)
+            }
+        }
+    }
+
+    fun logoutStoreAccount() {
+        sessionManager.clearActiveSession()
+        _activeStoreSession.value = null
+        _syncStatusMessage.value = "Berhasil keluar dari akun."
+    }
+
+    fun clearSyncStatusMessage() {
+        _syncStatusMessage.value = null
     }
 }

@@ -65,6 +65,7 @@ enum class PosTab(val label: String, val selectedIcon: ImageVector, val unselect
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.util.configureAppCheck(this, intent)
         enableEdgeToEdge()
         setContent {
             KasirKilatTheme {
@@ -84,6 +85,7 @@ fun KasirApp(viewModel: PosViewModel = viewModel()) {
     val storeProfile by viewModel.storeProfile.collectAsStateWithLifecycle()
     val filteredProducts by viewModel.filteredProducts.collectAsStateWithLifecycle()
     val allProducts by viewModel.allProducts.collectAsStateWithLifecycle()
+    val managedCategories by viewModel.allManagedCategories.collectAsStateWithLifecycle()
     val categories by viewModel.allCategories.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
@@ -98,6 +100,10 @@ fun KasirApp(viewModel: PosViewModel = viewModel()) {
     val totalProfit by viewModel.totalProfit.collectAsStateWithLifecycle()
     val totalTxCount by viewModel.totalTransactionCount.collectAsStateWithLifecycle()
     val topSelling by viewModel.topSellingProducts.collectAsStateWithLifecycle()
+
+    val totalInventoryCost by viewModel.totalInventoryCost.collectAsStateWithLifecycle()
+    val totalInventorySellingValue by viewModel.totalInventorySellingValue.collectAsStateWithLifecycle()
+    val totalStockUnits by viewModel.totalStockUnits.collectAsStateWithLifecycle()
 
     val activeReceipt by viewModel.latestCompletedReceipt.collectAsStateWithLifecycle()
 
@@ -156,10 +162,16 @@ fun KasirApp(viewModel: PosViewModel = viewModel()) {
         ) {
             when (currentTab) {
                 PosTab.CASHIER -> {
+                    val defaultUnwanted = remember { setOf("makanan", "minuman", "cemilan", "snak", "snack", "sembako", "jasa") }
+                    val displayCategories = remember(managedCategories, categories) {
+                        (managedCategories.map { it.name } + categories)
+                            .distinct()
+                            .filter { it.isNotBlank() && !defaultUnwanted.contains(it.lowercase()) }
+                    }
                     CashierScreen(
                         storeProfile = storeProfile,
                         products = filteredProducts,
-                        categories = categories,
+                        categories = displayCategories,
                         selectedCategory = selectedCategory,
                         searchQuery = searchQuery,
                         cart = cart,
@@ -168,15 +180,27 @@ fun KasirApp(viewModel: PosViewModel = viewModel()) {
                         onSearchChange = { viewModel.setSearchQuery(it) },
                         onCategorySelect = { viewModel.setSelectedCategory(it) },
                         onAddToCart = { viewModel.addToCart(it) },
+                        onDecreaseQuantity = { viewModel.decreaseQuantity(it) },
+                        onClearCart = { viewModel.clearCart() },
                         onOpenCart = { showCartSheet = true },
-                        onOpenPayment = { showPaymentSheet = true }
+                        onOpenPayment = { showPaymentSheet = true },
+                        onNavigateToProducts = { currentTab = PosTab.PRODUCTS }
                     )
                 }
                 PosTab.PRODUCTS -> {
                     ProductsScreen(
                         products = allProducts,
+                        managedCategories = managedCategories,
+                        totalInventoryCost = totalInventoryCost,
+                        totalInventorySellingValue = totalInventorySellingValue,
+                        totalStockUnits = totalStockUnits,
                         onSaveProduct = { viewModel.saveProduct(it) },
-                        onDeleteProduct = { viewModel.deleteProduct(it) }
+                        onDeleteProduct = { viewModel.deleteProduct(it) },
+                        onAdjustStock = { product, newStock -> viewModel.updateStock(product.id, newStock) },
+                        onAddCategory = { viewModel.addCategory(it) },
+                        onDeleteCategory = { cat, deleteProds -> viewModel.deleteCategory(cat, deleteProds) },
+                        onCleanDefaultCategories = { viewModel.cleanDefaultUnwantedCategories() },
+                        onUpdateProductCategory = { prod, newCategory -> viewModel.updateProductCategory(prod, newCategory) }
                     )
                 }
                 PosTab.HISTORY -> {

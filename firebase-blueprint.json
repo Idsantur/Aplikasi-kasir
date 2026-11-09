@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "StoreAccount": {
+      "title": "StoreAccount",
+      "description": "Store account registered with phone number and PIN hash for multi-device sync",
+      "type": "object",
+      "properties": {
+        "phoneNumber": {
+          "type": "string",
+          "description": "Store owner phone number"
+        },
+        "pinHash": {
+          "type": "string",
+          "description": "SHA-256 hash of 6-digit PIN"
+        },
+        "storeName": {
+          "type": "string",
+          "description": "Name of the store"
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Auth user ID of the registered store owner"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last sync or update timestamp"
+        }
+      },
+      "required": ["phoneNumber", "pinHash", "storeName", "ownerUid", "createdAt", "updatedAt"]
+    },
+    "CloudProduct": {
+      "title": "CloudProduct",
+      "description": "Cloud synced inventory product for the store",
+      "type": "object",
+      "properties": {
+        "phoneNumber": {
+          "type": "string",
+          "description": "Owner phone number associating the product"
+        },
+        "name": {
+          "type": "string",
+          "description": "Product or menu name"
+        },
+        "barcode": {
+          "type": "string",
+          "description": "Barcode or SKU"
+        },
+        "category": {
+          "type": "string",
+          "description": "Product category"
+        },
+        "sellingPrice": {
+          "type": "integer",
+          "description": "Selling price in Rupiah"
+        },
+        "costPrice": {
+          "type": "integer",
+          "description": "Cost price in Rupiah"
+        },
+        "stock": {
+          "type": "integer",
+          "description": "Current inventory stock count"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Measurement unit (pcs, unit, box, etc)"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether product is active"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["phoneNumber", "name", "category", "sellingPrice", "costPrice", "stock", "unit", "isActive", "createdAt", "updatedAt"]
+    },
+    "CloudCategory": {
+      "title": "CloudCategory",
+      "description": "Cloud synced custom category",
+      "type": "object",
+      "properties": {
+        "phoneNumber": {
+          "type": "string",
+          "description": "Owner phone number"
+        },
+        "name": {
+          "type": "string",
+          "description": "Category name"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["phoneNumber", "name", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/stores/{phoneNumber}": {
+      "schema": "StoreAccount",
+      "description": "Store account document keyed by phone number"
+    },
+    "/stores/{phoneNumber}/products/{productId}": {
+      "schema": "CloudProduct",
+      "description": "Products and menu catalog belonging to the store"
+    },
+    "/stores/{phoneNumber}/categories/{categoryId}": {
+      "schema": "CloudCategory",
+      "description": "Custom categories belonging to the store"
+    }
+  }
+}

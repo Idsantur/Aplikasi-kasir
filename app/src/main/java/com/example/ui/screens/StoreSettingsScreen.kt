@@ -49,10 +49,17 @@ import com.example.data.local.entity.StoreProfile
 import com.example.ui.components.BluetoothPrinterDialog
 import com.example.util.BluetoothPrinterManager
 
+import com.example.data.local.ActiveStoreSession
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.PhoneAndroid
+
 @Composable
 fun StoreSettingsScreen(
     storeProfile: StoreProfile,
-    onSaveProfile: (StoreProfile) -> Unit
+    activeSession: ActiveStoreSession? = null,
+    onSaveProfile: (StoreProfile) -> Unit,
+    onOpenAccountDialog: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showPrinterDialog by remember { mutableStateOf(false) }
@@ -82,6 +89,101 @@ fun StoreSettingsScreen(
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        // Cloud Store Account & Multi-Device Sync Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("cloud_account_card"),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (activeSession != null) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    }
+                ),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                modifier = Modifier.size(36.dp),
+                                shape = CircleShape,
+                                color = if (activeSession != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (activeSession != null) Icons.Default.CloudDone else Icons.Default.CloudSync,
+                                        contentDescription = null,
+                                        tint = if (activeSession != null) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (activeSession != null) "Akun Cloud Terhubung" else "Akun Cloud & Pindah HP",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (activeSession != null)
+                                        "${activeSession.phoneNumber} - ${activeSession.storeName}"
+                                    else
+                                        "Login Nomor HP & PIN agar menu anti hilang",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = if (activeSession != null)
+                            "Data menu dan harga toko Anda disinkronkan ke Cloud. Saat pindah ke HP lain, cukup login dengan nomor ini."
+                        else
+                            "Hubungkan Nomor HP dan buat 6 digit PIN untuk mengamankan menu toko Anda di Cloud. Bila ganti HP, menu dapat dipulihkan kapan saja.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onOpenAccountDialog,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_cloud_account_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (activeSession != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneAndroid,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (activeSession != null) "Kelola Akun & Sinkronkan" else "Masuk / Buat Akun Toko (No. HP & PIN)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
             }
         }
 

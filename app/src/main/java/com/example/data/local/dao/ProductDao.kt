@@ -23,6 +23,12 @@ interface ProductDao {
     @Query("SELECT DISTINCT category FROM products WHERE isActive = 1 ORDER BY category ASC")
     fun getAllCategories(): Flow<List<String>>
 
+    @Query("SELECT * FROM products WHERE isActive = 1")
+    suspend fun getAllActiveProductsList(): List<Product>
+
+    @Query("DELETE FROM products")
+    suspend fun deleteAllProducts()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProduct(product: Product): Long
 
@@ -40,6 +46,18 @@ interface ProductDao {
 
     @Query("UPDATE products SET stock = :newStock WHERE id = :productId")
     suspend fun updateStock(productId: Long, newStock: Int)
+
+    @Query("UPDATE products SET stock = MAX(0, stock + :delta) WHERE id = :productId")
+    suspend fun adjustStock(productId: Long, delta: Int)
+
+    @Query("SELECT SUM(costPrice * stock) FROM products WHERE isActive = 1")
+    fun getTotalInventoryCost(): Flow<Long?>
+
+    @Query("SELECT SUM(sellingPrice * stock) FROM products WHERE isActive = 1")
+    fun getTotalInventoryValue(): Flow<Long?>
+
+    @Query("SELECT SUM(stock) FROM products WHERE isActive = 1")
+    fun getTotalStockUnits(): Flow<Int?>
 
     @Query("SELECT COUNT(*) FROM products")
     suspend fun countProducts(): Int
